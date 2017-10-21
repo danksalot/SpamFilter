@@ -1,0 +1,46 @@
+CSCE 5200 Information Retrieval and Web Search
+Spring 2013
+Assignment 3
+80 points
+Issued: 03/06/2013 Due: 03/22/2013
+
+
+In this assignment, you will have to implement a Rocchio text
+classifier, as discussed in class. In your implementation, assume 
+the following format for the input data:
+   - all the training files are stored in a directory 
+     called training/
+   - all the test files are stored in a directory
+     called test/
+   - there is a file called cats.txt which includes a line for 
+     each training file and for each test file, each file name
+     with its corresponding category
+
+For instance, assuming the following files:
+   training/ 
+       file1 file3 file4 file6
+   test/
+       file2 file5
+The file cats.txt might include something like:
+       file1 spam
+       file2 no-spam
+       file3 spam
+       file4 spam
+       file5 no-spam
+       file6 spam
+
+Test your implementation on the data set provided on the class 
+webpage. 
+
+
+Submission instructions:
+   - write a README file including:
+         * a detailed note about the functionality of the program, 
+         * complete instructions on how to run it
+         * the accuracy of your algorithm on the test data
+   - make sure you include your name in each program and in the README file.
+   - make sure the program runs correctly on the CSP machines.
+   - submit your assignment, including programs and README file by the
+     due date using the 'project' program. 
+     Class code is 5200s001, project HW3.
+
