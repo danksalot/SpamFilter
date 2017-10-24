@@ -1,0 +1,187 @@
+import os
+from collections import defaultdict
+from math import log, sqrt
+
+
+########################################################
+# VARIABLES
+########################################################
+
+stopwords = []
+spamIndex = {}
+goodIndex = {}
+testIndex = {}
+frequency = defaultdict(int)
+
+spamVector = defaultdict(int)
+spamModel = defaultdict(float)
+
+goodVector = defaultdict(int)
+goodModel = defaultdict(float)
+
+testFileVector = defaultdict(int)
+testFileModel = defaultdict(float)
+
+trainingFiles = {}
+correct = 0
+wrong = 0
+
+
+########################################################
+# SETTINGS
+########################################################
+
+trainingTermFrequencyMethod = ['binary', 'termFrequency', 'normalized'][1]
+trainingCollFrequencyMethod = ['noChange', 'inverseCollectionFrequency', 'probabilisticInverseCollectionFrequency'][0]
+trainingNormalizationMethod = ['noChange', 'cosineNormalization'][1]
+
+testingTermFrequencyMethod = ['binary', 'termFrequency', 'normalized'][2]
+testingCollFrequencyMethod = ['noChange', 'inverseCollectionFrequency', 'probabilisticInverseCollectionFrequency'][1]
+testingNormalizationMethod = ['noChange', 'cosineNormalization'][0]
+
+
+########################################################
+# CALCULATION METHODS
+########################################################
+
+def termFrequency(termFrequency, maxTermFrequency, method):
+	if (method == 'binary'):
+		return 1
+	elif (method == 'termFrequency'):
+		return termFrequency
+	elif (method == 'normalized'):
+		return 0.5 + 0.5 * termFrequency / maxTermFrequency
+
+def collectionFrequency(termFrequency, docsWithWord, totalDocCount, method):
+	if (method == 'noChange'):
+		return termFrequency
+	elif (method == 'inverseCollectionFrequency'):
+		return termFrequency * log(totalDocCount / docsWithWord)
+	elif (method == 'probabilisticInverseCollectionFrequency'):
+		return termFrequency * log((totalDocCount - docsWithWord) / docsWithWord)
+
+def normalizationComponent(termWeight, vectorLength, method):
+	if (method == 'noChange'):
+		return termWeight
+	elif (method == 'cosineNormalization'):
+		return termWeight / vectorLength
+
+def createTrainingModel(vector, localIndex, model, numberOfDocs, tfMethod, collMethod, normMethod):
+	sumOfSquaredWeights = sum(map(lambda weight: weight ** 2, vector.values()))
+	vectorLength = sqrt(sumOfSquaredWeights)
+	print("Vector Length: " + str(vectorLength))
+	maxTF = max(vector.values())
+
+	for word in vector:
+		tf = termFrequency(vector[word], maxTF, tfMethod)
+		cf = collectionFrequency(tf, len(localIndex[word]), numberOfDocs, collMethod)
+		nf = normalizationComponent(cf, vectorLength, normMethod)
+
+		if word == "report":
+			print("tf: {0}, cf: {1}, nf: {2}".format(tf, cf, nf))
+			print("number of training files: " + str(numberOfDocs))
+
+		model[word] = nf
+
+def createTestModel(vector, model, tfMethod, collMethod, normMethod):
+	sumOfSquaredWeights = sum(map(lambda weight: weight ** 2, vector.values()))
+	vectorLength = sqrt(sumOfSquaredWeights)
+	maxTF = max(vector.values())
+
+	for word in vector:
+		docsWithWord = (len(spamIndex[word]) if word in spamIndex else 0) + (len(goodIndex[word]) if word in goodIndex else 0) + 1
+		tf = termFrequency(vector[word], maxTF, tfMethod)
+		cf = collectionFrequency(tf, docsWithWord, numSpamFiles + numGoodFiles + 1, collMethod)
+		nf = normalizationComponent(cf, vectorLength, normMethod)
+
+		model[word] = nf
+
+def calculateSimilarity(trainedModel, testModel):
+	return sum(trainedModel[word] * testModel[word] for word, weight in testModel.items())
+
+
+########################################################
+# TRAINING
+########################################################
+
+# READ IN THE STOPWORDS FROM FILE
+with open('stopwords.txt') as f:
+	stopwords = f.read().splitlines()
+
+# READ IN THE TEST CLASSIFICATIONS FROM FILE
+with open('cats.txt') as f:
+	for line in f:
+		parts = line.split()
+		trainingFiles[parts[0]] = True if parts[1] == 'spam' else False
+
+# GET A COUNT OF SPAM FILES AND GOOD FILES
+numSpamFiles = 0
+numGoodFiles = 0
+
+# READ IN TRAINING FILES AND BUILD VECTORS
+for filename in os.listdir('Training'):
+	baseFileName = filename.split('.')[0]
+	
+	if(trainingFiles[filename]):
+		numSpamFiles += 1
+	else:
+		numGoodFiles += 1
+
+	with open('Training/' + filename) as f:
+		for line in f:
+			words = line.split()
+			for word in words:
+				if word not in stopwords:
+					if(trainingFiles[filename]):
+						if word not in spamIndex:
+							spamIndex[word] = defaultdict(int)
+
+						spamIndex[word][filename] += 1
+						spamVector[word] += 1
+					else:
+						if word not in goodIndex:
+							goodIndex[word] = defaultdict(int)
+
+						goodIndex[word][filename] += 1
+						goodVector[word] += 1
+
+createTrainingModel(spamVector, spamIndex, spamModel, numSpamFiles, trainingTermFrequencyMethod, trainingCollFrequencyMethod, trainingNormalizationMethod)
+createTrainingModel(goodVector, goodIndex, goodModel, numGoodFiles, trainingTermFrequencyMethod, trainingCollFrequencyMethod, trainingNormalizationMethod)
+
+
+########################################################
+# TESTING
+########################################################
+
+# NOW LETS PROCESS THE TEST DOCUMENTS
+for filename in os.listdir('Test'):
+	baseFileName = filename.split('.')[0]
+	with open('Test/' + filename) as f:
+		for line in f:
+			words = line.split()
+			for word in words:
+				if word not in stopwords:
+					testFileVector[word] += 1
+
+	createTestModel(testFileVector, testFileModel, testingTermFrequencyMethod, testingCollFrequencyMethod, testingNormalizationMethod)
+
+	spamSimilarity = calculateSimilarity(spamModel, testFileModel)
+	goodSimilarity = calculateSimilarity(goodModel, testFileModel)
+
+	# JUDGE HOW WE DID AND RECORD RESULTS
+	if (trainingFiles[filename]):
+		if (spamSimilarity > goodSimilarity):
+			#print (filename + '\tSpam\t' + str(spamSimilarity) + ' / ' + str(goodSimilarity) + '\tGot it right!')
+			correct += 1
+		else:
+			#print (filename + '\tNot Spam\t' + str(spamSimilarity) + ' / ' + str(goodSimilarity) + '\tGot it wrong!')
+			wrong += 1
+	else:
+		if (spamSimilarity > goodSimilarity):
+			#print (filename + '\tSpam\t' + str(spamSimilarity) + ' / ' + str(goodSimilarity) + '\tGot it wrong!')
+			wrong += 1
+		else:
+			#print (filename + '\tNot Spam\t' + str(spamSimilarity) + ' / ' + str(goodSimilarity) + '\tGot it right!')
+			correct += 1
+
+print ('\nCorrect: ' + str(correct) + '\nWrong: ' + str(wrong));#
